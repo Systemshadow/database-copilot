@@ -1,0 +1,11 @@
+streamlit
+python-dotenv
+openai>=1.30.0
+pandas
+sqlalchemy
+pyodbc          # SQL Server
+psycopg2-binary # PostgreSQL  
+pymysql         # MySQL
+cx-Oracle       # Oracle (optional)
+duckdb          # Local testing
+requests        # For downloading test data

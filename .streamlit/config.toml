@@ -1,0 +1,13 @@
+[global]
+developmentMode = false
+
+[server]
+runOnSave = true
+port = 8501
+
+[theme]
+base = "light"
+primaryColor = "#2E8B57"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
