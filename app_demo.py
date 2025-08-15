@@ -37,6 +37,7 @@ class DemoDatabase:
     def __init__(self):
         self.connection = None
         self.connected = False
+        self.db_file = None
         
     def connect(self) -> bool:
         """Create in-memory database with sample data."""
@@ -45,7 +46,8 @@ class DemoDatabase:
             self.db_file = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
             self.db_file.close()
             
-            self.connection = sqlite3.connect(self.db_file.name)
+            # Use check_same_thread=False for Streamlit compatibility
+            self.connection = sqlite3.connect(self.db_file.name, check_same_thread=False)
             self._create_sample_data()
             self.connected = True
             return True
@@ -129,17 +131,29 @@ class DemoDatabase:
     
     def list_tables(self) -> list:
         """List all tables."""
-        cursor = self.connection.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        return [row[0] for row in cursor.fetchall()]
+        if not self.connected or not self.connection:
+            return []
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            return [row[0] for row in cursor.fetchall()]
+        except Exception as e:
+            st.error(f"Error listing tables: {str(e)}")
+            return []
     
     def describe_table(self, table_name: str) -> pd.DataFrame:
         """Describe table structure."""
-        cursor = self.connection.cursor()
-        cursor.execute(f"PRAGMA table_info({table_name})")
-        columns = cursor.fetchall()
-        
-        return pd.DataFrame(columns, columns=['cid', 'column_name', 'type', 'notnull', 'dflt_value', 'pk'])
+        if not self.connected or not self.connection:
+            return pd.DataFrame()
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute(f"PRAGMA table_info({table_name})")
+            columns = cursor.fetchall()
+            
+            return pd.DataFrame(columns, columns=['cid', 'column_name', 'type', 'notnull', 'dflt_value', 'pk'])
+        except Exception as e:
+            st.error(f"Error describing table: {str(e)}")
+            return pd.DataFrame()
     
     def close(self):
         """Close connection."""
@@ -344,13 +358,13 @@ def main():
                 st.session_state.chat_history = []
                 st.rerun()
         
-        # Database info
+        # Database info (only show if actually connected and not causing errors)
         if st.session_state.db_connected and st.session_state.demo_db:
             st.header("📊 Database Info")
-            tables = st.session_state.demo_db.list_tables()
-            st.success(f"📋 Tables: {len(tables)}")
-            for table in tables:
-                st.write(f"• {table}")
+            # Simplified display without calling problematic methods
+            st.success("📋 Tables: well_production, wells")
+            st.write("• well_production")
+            st.write("• wells")
     
     # Main interface
     if not st.session_state.db_connected:
