@@ -15,65 +15,103 @@ def get_env_var(key: str, default: str = "") -> str:
 
 
 class DemoAssistant:
-    """Demo assistant with pre-programmed responses."""
+    """Demo assistant that uses OpenAI API for intelligent responses."""
     
     def __init__(self):
-        self.openai_available = get_env_var('OPENAI_API_KEY') and get_env_var('OPENAI_API_KEY') != 'your_openai_api_key_here'
+        self.openai_client = None
+        self._initialize_openai()
         
-        # Sample data for responses
-        self.sample_data = {
-            'wells': [
-                {'name': 'Smith 1H', 'operator': 'Chesapeake Energy', 'county': 'Broome', 'oil_2023': 14567, 'gas_2023': 567823},
-                {'name': 'Jones 2H', 'operator': 'Range Resources', 'county': 'Tioga', 'oil_2023': 12234, 'gas_2023': 523456},
-                {'name': 'Brown 3H', 'operator': 'Chesapeake Energy', 'county': 'Chemung', 'oil_2023': 13789, 'gas_2023': 545678},
-                {'name': 'Wilson 4H', 'operator': 'Cabot Oil', 'county': 'Broome', 'oil_2023': 11456, 'gas_2023': 489234}
-            ]
-        }
+        # Sample data context for the AI
+        self.data_context = """
+        PRODUCTION DATABASE CONTEXT:
+        
+        Wells in database:
+        - Smith 1H (Chesapeake Energy, Broome County): 2023: 14,567 bbls oil, 567,823 MCF gas | 2022: 13,412 bbls oil
+        - Jones 2H (Range Resources, Tioga County): 2023: 12,234 bbls oil, 523,456 MCF gas | 2022: 11,876 bbls oil  
+        - Brown 3H (Chesapeake Energy, Chemung County): 2023: 13,789 bbls oil, 545,678 MCF gas | 2022: 12,234 bbls oil
+        - Wilson 4H (Cabot Oil, Broome County): 2023: 11,456 bbls oil, 489,234 MCF gas | 2022: 10,310 bbls oil
+        
+        TOTALS:
+        - 2023: 52,046 bbls oil total, 2.13M MCF gas total
+        - 2022: 47,832 bbls oil total, 1.96M MCF gas total
+        - Growth: +9% oil year-over-year
+        
+        All wells are horizontal Marcellus shale wells in New York state.
+        """
+    
+    def _initialize_openai(self):
+        """Initialize OpenAI client."""
+        api_key = get_env_var('OPENAI_API_KEY')
+        if api_key and api_key != 'your_openai_api_key_here':
+            try:
+                import openai
+                self.openai_client = openai.OpenAI(api_key=api_key)
+            except Exception as e:
+                print(f"OpenAI initialization failed: {e}")
     
     def ask_question(self, question: str) -> str:
-        """Generate intelligent responses based on question patterns."""
-        question_lower = question.lower()
+        """Generate intelligent responses using OpenAI API."""
         
-        # Specific well questions
-        if 'smith 1h' in question_lower and 'january 2023' in question_lower:
-            return "Based on our production records, Smith 1H produced 1,247 barrels of oil in January 2023. This was actually above average for that well - about 15% higher than December 2022. The well is operated by Chesapeake Energy and is located in Broome County. January was a strong month for this particular well compared to the field average."
+        # If OpenAI is available, use it for intelligent responses
+        if self.openai_client:
+            try:
+                prompt = f"""
+                You are an expert oil & gas data analyst having a conversation with a colleague about production data. 
+                Respond naturally and conversationally based on the database information provided.
+
+                QUESTION: {question}
+
+                DATABASE INFORMATION:
+                {self.data_context}
+
+                INSTRUCTIONS:
+                - Respond like a knowledgeable analyst talking to a colleague
+                - Be conversational and natural, not robotic
+                - Include specific numbers from the data when relevant
+                - Provide insights and context, not just raw data
+                - If the question is about something not in the database, explain what data you do have
+                - Use formatting like **bold** for emphasis when helpful
+                - Keep responses focused and helpful
+                - Add relevant insights about trends, comparisons, or implications
+
+                Respond as a human analyst would in a conversation.
+                """
+                
+                response = self.openai_client.chat.completions.create(
+                    model="gpt-4",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are a knowledgeable oil & gas production analyst. Respond conversationally and naturally, like you're talking to a colleague. Use the provided data to give intelligent, insightful answers."
+                        },
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=500,
+                    temperature=0.3
+                )
+                
+                return response.choices[0].message.content.strip()
+                
+            except Exception as e:
+                print(f"OpenAI API error: {e}")
+                return self._fallback_response(question)
         
-        elif 'smith 1h' in question_lower:
-            return "Smith 1H is one of our top performers! In 2023, this well produced a total of 14,567 barrels of oil and 567,823 MCF of gas. It's operated by Chesapeake Energy in Broome County. The well has been consistently strong since coming online, typically producing 1,200-1,400 barrels per month."
-        
-        # Top wells questions
-        elif 'top' in question_lower and ('wells' in question_lower or 'producing' in question_lower):
-            return "Here are the top producing wells in 2023 by oil production:\n\n1. **Smith 1H** - 14,567 bbls (Chesapeake Energy, Broome County)\n2. **Brown 3H** - 13,789 bbls (Chesapeake Energy, Chemung County)\n3. **Jones 2H** - 12,234 bbls (Range Resources, Tioga County)\n4. **Wilson 4H** - 11,456 bbls (Cabot Oil, Broome County)\n\nChesapeake Energy operates two of the top four wells, showing strong performance in this region."
-        
-        # Operator questions
-        elif 'chesapeake' in question_lower:
-            total_oil = 14567 + 13789
-            total_gas = 567823 + 545678
-            return f"Chesapeake Energy operates 2 wells in our database - Smith 1H and Brown 3H. In 2023, their total production was {total_oil:,} barrels of oil and {total_gas:,} MCF of gas. They're one of our strongest operators with consistently high-performing wells. Both wells are horizontal Marcellus shale wells."
-        
-        # County questions
-        elif 'county' in question_lower and ('production' in question_lower or 'highest' in question_lower):
-            return "**Broome County** had the highest production in 2023 with two wells:\n- Smith 1H: 14,567 bbls oil\n- Wilson 4H: 11,456 bbls oil\n\n**Total Broome County: 26,023 bbls oil**\n\nTioga County follows with Jones 2H at 12,234 bbls, and Chemung County with Brown 3H at 13,789 bbls. Broome County benefits from excellent geology and infrastructure."
-        
-        # General data questions
-        elif 'wells' in question_lower or 'data' in question_lower or 'database' in question_lower:
-            return "Our database contains production data for 4 active wells across 3 counties in New York:\n\n**Wells**: Smith 1H, Jones 2H, Brown 3H, Wilson 4H\n**Operators**: Chesapeake Energy, Range Resources, Cabot Oil\n**Counties**: Broome, Tioga, Chemung\n\nWe track monthly oil and gas production, with data going back to 2022. All wells are horizontal Marcellus shale wells."
-        
-        # Production trends
-        elif 'change' in question_lower or 'trend' in question_lower:
-            return "Production trends for 2023 show steady performance across our well portfolio. Smith 1H and Brown 3H (both Chesapeake) have been the most consistent, with Smith 1H showing a slight upward trend in Q4. Jones 2H had some temporary declines in summer 2023 but recovered well. Overall, the field is performing above initial forecasts."
-        
-        # Year over year
-        elif 'yoy' in question_lower or 'year over year' in question_lower:
-            return "Year-over-year (2022 vs 2023), our wells showed strong performance:\n\n- **Smith 1H**: +8% oil production increase\n- **Jones 2H**: +3% oil production increase  \n- **Brown 3H**: +12% oil production increase\n- **Wilson 4H**: +5% oil production increase\n\nThe portfolio average was +7% growth, driven primarily by optimized completion techniques and better reservoir management."
-        
-        # Missing wells
-        elif any(well in question_lower for well in ['abc-123', 'xyz-456']):
-            return "I don't see that well in our database. The wells I have production data for are Smith 1H, Jones 2H, Brown 3H, and Wilson 4H. These are all active Marcellus shale wells in New York. Would you like information about any of these wells instead?"
-        
-        # Default helpful response
         else:
-            return "I can help you with questions about our oil & gas production data! I have information on 4 wells operated by Chesapeake Energy, Range Resources, and Cabot Oil across Broome, Tioga, and Chemung counties. Try asking about specific wells like 'Smith 1H', production by operator like 'Chesapeake Energy', or general questions like 'top producing wells'."
+            return self._fallback_response(question)
+    
+    def _fallback_response(self, question: str) -> str:
+        """Fallback response when OpenAI is not available."""
+        return f"""I'd love to help analyze that for you! However, I need my OpenAI API connection to provide intelligent responses.
+        
+        **What I can tell you about our database:**
+        • 4 wells: Smith 1H, Jones 2H, Brown 3H, Wilson 4H
+        • 3 operators: Chesapeake Energy, Range Resources, Cabot Oil  
+        • 2022-2023 production data
+        • Total 2023: 52,046 bbls oil, 2.13M MCF gas
+        
+        With the full AI connection, I could analyze trends, compare performance, and provide detailed insights about your question: "{question}"
+        
+        *This demonstrates the concept - in production, the AI would provide detailed, conversational analysis of your actual database.*"""
 
 
 def initialize_app():
