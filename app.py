@@ -115,14 +115,17 @@ def chat_interface():
     st.title("🤖 Database Copilot")
     st.markdown("Ask questions about your oil & gas data in plain English. I'll query your database and provide intelligent answers.")
     
-    # Example questions
+    # Updated example questions that match your actual database
     with st.expander("💡 Example Questions", expanded=True):
         examples = [
-            "What was the production for well ABC-123 in January 2023?",
-            "Show me the top 10 producing wells last month",
-            "What's the total oil production for Chesapeake Energy in 2023?", 
-            "Which county had the highest gas production last year?",
-            "How did production change for well XYZ-456 over the last 6 months?"
+            "How many wells are in the database?",
+            "Show me the top 10 producing wells in 2023",
+            "What was the total oil production in 2023?",
+            "What was the production for well XTO-6313H in 2023?",
+            "Compare production between XTO-6313H and WPX-8369H",
+            "What's the total production for XTO Energy Inc in 2023?",
+            "How many wells does XTO Energy Inc operate?",
+            "Show me all wells in Genesee County",
         ]
         
         cols = st.columns(2)
@@ -217,7 +220,7 @@ def show_config_help():
     - postgresql (PostgreSQL)
     - mysql (MySQL)
     - oracle (Oracle)
-    - duckdb (Local testing)
+    - sqlite (Local testing)
     """)
 
 
