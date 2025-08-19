@@ -1,5 +1,0 @@
-API_WellNo,Well_Name,Operator_Name,County,Well_Type,Status,Spud_Date,Total_Depth,Field_Name
-31-001-12345,Smith 1H,Chesapeake Energy,Broome,Horizontal,Producing,2022-03-15,8500,Marcellus
-31-001-12346,Jones 2H,Range Resources,Tioga,Horizontal,Producing,2022-04-20,9200,Marcellus
-31-001-12347,Brown 3H,Chesapeake Energy,Chemung,Horizontal,Producing,2022-05-10,8800,Marcellus
-31-001-12348,Wilson 4H,Cabot Oil,Broome,Horizontal,Producing,2022-06-05,8750,Marcellus
