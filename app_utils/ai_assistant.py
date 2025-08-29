@@ -1,11 +1,12 @@
 """
-Enhanced AI-powered database assistant with intelligent error handling.
-This replaces the old robotic responses with conversational expert responses.
+Enhanced AI Assistant with Multi-Table Support and Structured Responses
+Quick fix version - working for client demo.
 """
 
 import os
 import pandas as pd
-from typing import Optional, List, Dict, Tuple
+import streamlit as st
+from typing import Optional, List, Dict, Tuple, Any
 from dataclasses import dataclass
 from dotenv import load_dotenv
 import traceback
@@ -23,29 +24,55 @@ load_dotenv()
 
 @dataclass
 class QueryResult:
-    """Result of a database query with metadata."""
+    """Enhanced result with structured data support."""
     success: bool
     data: Optional[pd.DataFrame] = None
     sql_query: Optional[str] = None
     error_message: Optional[str] = None
     execution_time: Optional[float] = None
+    display_as_table: bool = False
+    table_title: Optional[str] = None
 
 
-class ExpertDatabaseAssistant:
-    """
-    AI expert colleague for natural language database queries.
-    Provides conversational, intelligent responses instead of robotic error messages.
-    """
+class MultiTableDatabaseAssistant:
+    """Enhanced AI assistant with multi-table support and structured responses."""
     
     def __init__(self, db_manager: DatabaseManager):
         self.db_manager = db_manager
         self.openai_client = None
         self.conversation_context = []
         self._initialize_openai()
+        
+        # Define table relationships
+        self.table_relationships = {
+            'production': {
+                'join_key': 'API_WellNo',
+                'related_tables': ['wells'],
+                'description': 'Monthly production data by well'
+            },
+            'wells': {
+                'join_key': 'API_WellNo', 
+                'related_tables': ['production'],
+                'description': 'Master well data with technical details'
+            }
+        }
     
     def _initialize_openai(self):
         """Initialize OpenAI client if API key is available."""
-        api_key = os.getenv('OPENAI_API_KEY')
+        # Try Streamlit secrets first (for cloud deployment)
+        api_key = None
+        
+        try:
+            if hasattr(st, 'secrets') and 'OPENAI_API_KEY' in st.secrets:
+                api_key = st.secrets['OPENAI_API_KEY']
+        except:
+            # Secrets not available (local development)
+            pass
+        
+        if not api_key:
+            # Fallback to environment variable (for local testing)
+            api_key = os.getenv('OPENAI_API_KEY')
+        
         if OPENAI_AVAILABLE and api_key and api_key != 'your_openai_api_key_here':
             try:
                 self.openai_client = OpenAI(api_key=api_key)
@@ -53,55 +80,52 @@ class ExpertDatabaseAssistant:
                 print(f"OpenAI initialization failed: {str(e)}")
                 self.openai_client = None
     
-    def ask_question(self, question: str) -> str:
-        """
-        Main interface: ask a question and get a conversational response.
-        THIS METHOD SHOULD NEVER THROW EXCEPTIONS - IT HANDLES ALL ERRORS GRACEFULLY.
-        """
+    def ask_question(self, question: str) -> Dict[str, Any]:
+        """Main interface: ask a question and get a response with structured data support."""
         try:
             # Add to conversation context
             self.conversation_context.append({"role": "user", "content": question})
             
             # Execute the query with full error handling
-            query_result = self._execute_query_safely(question)
+            query_result = self._execute_enhanced_query(question)
             
-            # Generate conversational response
-            response = self._generate_expert_response(question, query_result)
+            # Generate response (text + structured data)
+            response_data = self._generate_enhanced_response(question, query_result)
             
             # Add response to context
-            self.conversation_context.append({"role": "assistant", "content": response})
+            self.conversation_context.append({"role": "assistant", "content": response_data['text']})
             
-            return response
+            return response_data
             
         except Exception as e:
-            # This is the final safety net - should rarely be reached
-            return self._handle_critical_failure(question, str(e))
+            # Final safety net
+            return {
+                'text': f"I encountered an unexpected error while processing your question. Let me know if you'd like to try rephrasing it.",
+                'table_data': None,
+                'table_title': None
+            }
     
-    def _execute_query_safely(self, question: str) -> QueryResult:
-        """
-        Execute query with comprehensive error handling.
-        Never throws exceptions - always returns a QueryResult.
-        """
+    def _execute_enhanced_query(self, question: str) -> QueryResult:
+        """Execute query with multi-table awareness."""
         import time
         start_time = time.time()
         
         try:
-            # Check for relative timeframes first
-            if self._contains_relative_timeframe(question):
-                return self._handle_relative_timeframe(question)
+            # Determine if this needs multi-table support
+            needs_join = self._requires_cross_table_data(question)
             
             # Find relevant tables
-            relevant_tables = self.db_manager.find_relevant_tables(question)
+            relevant_tables = self._find_relevant_tables_enhanced(question)
             
             if not relevant_tables:
                 return QueryResult(
                     success=False,
-                    error_message="no_tables_found",
+                    error_message="Could not identify relevant tables",
                     execution_time=time.time() - start_time
                 )
             
-            # Generate SQL query
-            sql_query, error = self._generate_sql_safely(question, relevant_tables)
+            # Generate enhanced SQL
+            sql_query, error = self._generate_enhanced_sql(question, relevant_tables, needs_join)
             
             if error:
                 return QueryResult(
@@ -113,11 +137,17 @@ class ExpertDatabaseAssistant:
             # Execute the query
             result_df = self.db_manager.execute_query(sql_query)
             
+            # Determine if response should be displayed as table
+            display_as_table = self._enhanced_should_display_as_table(question, result_df)
+            table_title = self._generate_table_title(question, result_df) if display_as_table else None
+            
             return QueryResult(
                 success=True,
                 data=result_df,
                 sql_query=sql_query,
-                execution_time=time.time() - start_time
+                execution_time=time.time() - start_time,
+                display_as_table=display_as_table,
+                table_title=table_title
             )
             
         except Exception as e:
@@ -128,323 +158,106 @@ class ExpertDatabaseAssistant:
                 execution_time=execution_time
             )
     
-    def _contains_relative_timeframe(self, question: str) -> bool:
-        """Check if question contains relative timeframes that need special handling."""
-        relative_terms = [
-            "last month", "last year", "this month", "this year",
-            "yesterday", "today", "recent", "lately", "currently",
-            "now", "past month", "past year"
+    def _requires_cross_table_data(self, question: str) -> bool:
+        """Determine if question requires joining multiple tables."""
+        question_lower = question.lower()
+        
+        # Production + wells data indicators
+        cross_table_indicators = [
+            'depth', 'formation', 'permit', 'drilled', 'completed',
+            'horizontal', 'vertical', 'latitude', 'longitude',
+            'status', 'operator', 'spudded', 'location',
+            'by formation', 'by depth', 'by status', 'by operator',
+            'with their', 'and their', 'along with'
         ]
         
+        return any(indicator in question_lower for indicator in cross_table_indicators)
+    
+    def _find_relevant_tables_enhanced(self, question: str) -> List[str]:
+        """Enhanced table finding with multi-table awareness."""
         question_lower = question.lower()
-        return any(term in question_lower for term in relative_terms)
-    
-    def _handle_relative_timeframe(self, question: str) -> QueryResult:
-        """Handle questions with relative timeframes intelligently."""
-        # This creates a controlled "failure" that triggers intelligent response
-        return QueryResult(
-            success=False,
-            error_message="relative_timeframe_issue",
-            execution_time=0.1
-        )
-    
-    def _generate_sql_safely(self, question: str, relevant_tables: List[str]) -> Tuple[str, str]:
-        """Generate SQL with better error handling."""
-        try:
-            return self.generate_sql_query(question, relevant_tables)
-        except Exception as e:
-            return "", f"SQL generation exception: {str(e)}"
-    
-    def _generate_expert_response(self, question: str, query_result: QueryResult) -> str:
-        """
-        Generate expert-level conversational responses for all scenarios.
-        This replaces ALL old robotic error handling.
-        """
-        if query_result.success and query_result.data is not None and not query_result.data.empty:
-            # Successful query with data
-            return self._generate_success_response(question, query_result)
+        relevant_tables = set()
         
-        elif query_result.success and (query_result.data is None or query_result.data.empty):
-            # Query executed but no data found
-            return self._generate_no_data_response(question, query_result)
-        
-        else:
-            # Query failed - handle intelligently based on error type
-            return self._handle_query_failure(question, query_result)
-    
-    def _handle_query_failure(self, question: str, query_result: QueryResult) -> str:
-        """
-        Handle query failures with intelligent, conversational responses.
-        This is the key method that replaces old robotic error handling.
-        """
-        error_msg = query_result.error_message or ""
-        
-        # Handle specific error types intelligently
-        if "relative_timeframe_issue" in error_msg:
-            return self._handle_timeframe_error(question)
-        
-        elif "no_tables_found" in error_msg:
-            return self._handle_no_tables_error(question)
-        
-        elif "sql_generation_failed" in error_msg:
-            return self._handle_sql_generation_error(question, error_msg)
-        
-        elif "execution_error" in error_msg:
-            return self._handle_execution_error(question, error_msg)
-        
-        else:
-            return self._handle_generic_error(question, error_msg)
-    
-    def _handle_timeframe_error(self, question: str) -> str:
-        """Handle relative timeframe issues conversationally."""
-        if not self.openai_client:
-            return self._fallback_timeframe_response(question)
-        
-        try:
-            # Get available date ranges from database
-            available_data_context = self._get_available_timeframes()
-            
-            prompt = f"""
-You're an expert oil & gas analyst talking to a colleague. They asked: "{question}"
-
-The issue is they used relative timeframes like "last month" but we need to be specific about dates.
-
-Available data: {available_data_context}
-
-Respond conversationally like an expert colleague would, offering to help with specific timeframes instead.
-
-Example good responses:
-- "I'd love to show you last month's top performers, but our data goes through December 2024. Want me to pull December's numbers instead?"
-- "For recent data, I can show you the latest we have which is through 2024. Should I look at December 2024 or the full year?"
-- "Our data runs through 2024, so for 'recent' production I could show you Q4 2024 or the full year. Which would be more helpful?"
-
-Be specific about what data you actually have and offer concrete alternatives.
-"""
-            
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a knowledgeable oil & gas analyst. Respond conversationally and helpfully when users ask about timeframes you don't have data for."
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=300,
-                temperature=0.3
-            )
-            
-            return response.choices[0].message.content.strip()
-            
-        except Exception as e:
-            return self._fallback_timeframe_response(question)
-    
-    def _fallback_timeframe_response(self, question: str) -> str:
-        """Fallback response for timeframe issues without AI."""
-        question_lower = question.lower()
-        
-        if "last month" in question_lower:
-            return "I'd love to show you last month's data, but our database has production data through 2024. Would you like me to show December 2024 instead?"
-        
-        elif "last year" in question_lower:
-            return "For recent yearly data, I can show you 2023 or 2024 results. Which year would you prefer?"
-        
-        elif "recent" in question_lower or "lately" in question_lower:
-            return "For recent data, our database goes through 2024. I can show you the latest quarter or the full year 2024. What timeframe works best?"
-        
-        else:
-            return "I need specific dates or years to query the data. Our database covers 2000-2024. What timeframe would you like to see?"
-    
-    def _get_available_timeframes(self) -> str:
-        """Get information about available date ranges in the database."""
-        try:
-            # Try to get date range from the main production table
-            tables = list(self.db_manager.schema_cache.values())
-            production_table = None
-            
-            for table in tables:
-                if 'production' in table.name.lower() or 'prod' in table.name.lower():
-                    production_table = table.name
-                    break
-            
-            if production_table:
-                date_query = f"SELECT MIN(year) as min_year, MAX(year) as max_year FROM {production_table}"
-                result = self.db_manager.execute_query(date_query)
-                if not result.empty:
-                    min_year = result['min_year'].iloc[0]
-                    max_year = result['max_year'].iloc[0]
-                    return f"Data available from {min_year} to {max_year}"
-            
-            return "Data available from 2000 to 2024"
-            
-        except:
-            return "Data available from 2000 to 2024"
-    
-    def _handle_no_tables_error(self, question: str) -> str:
-        """Handle when no relevant tables are found."""
-        # Get available tables
-        available_tables = list(self.db_manager.schema_cache.keys()) if self.db_manager.schema_cache else []
-        
-        if available_tables:
-            table_list = ", ".join(available_tables[:5])
-            return f"I'm having trouble identifying which tables relate to your question about '{question}'. The main tables I see are: {table_list}. Could you be more specific about what data you're looking for?"
-        else:
-            return "I need to discover the database schema first. Could you try clicking 'Discover Schema' in the sidebar, then ask your question again?"
-    
-    def _handle_sql_generation_error(self, question: str, error_msg: str) -> str:
-        """Handle SQL generation failures."""
-        return f"I understand what you're asking, but I'm having trouble translating '{question}' into a database query. Could you try rephrasing it or being more specific about the wells, operators, or time periods you're interested in?"
-    
-    def _handle_execution_error(self, question: str, error_msg: str) -> str:
-        """Handle database execution errors."""
-        if "no such table" in error_msg.lower():
-            return "It looks like I'm trying to query a table that doesn't exist. The database schema might have changed. Could you try refreshing the connection in the sidebar?"
-        else:
-            return f"I ran into a database issue while processing your question '{question}'. The database might be temporarily unavailable, or there could be a connection issue."
-    
-    def _handle_generic_error(self, question: str, error_msg: str) -> str:
-        """Handle any other errors conversationally."""
-        return f"I'm having trouble processing your question '{question}' right now. This might be a temporary issue. Could you try rephrasing your question or checking if the database connection is working?"
-    
-    def _handle_critical_failure(self, question: str, error_details: str) -> str:
-        """Handle critical failures that shouldn't normally happen."""
-        return f"I apologize, but I'm experiencing a technical issue while processing your question '{question}'. Please try again, or if the problem persists, check the database connection."
-    
-    def _generate_success_response(self, question: str, query_result: QueryResult) -> str:
-        """Generate response for successful queries with data."""
-        if not self.openai_client:
-            return self._generate_fallback_response(question, query_result)
-        
-        try:
-            # Prepare data summary for the LLM
-            data_summary = self._summarize_data(query_result.data)
-            
-            prompt = f"""
-You are an expert oil & gas data analyst having a conversation with a colleague. Answer their question based on the database query results in a natural, conversational way.
-
-ORIGINAL QUESTION: {question}
-
-QUERY RESULTS SUMMARY:
-{data_summary}
-
-INSTRUCTIONS:
-- Respond as if you're a knowledgeable analyst talking to a colleague
-- Be conversational and natural, not robotic
-- Include specific numbers and context from the data
-- Add relevant insights or observations when appropriate
-- Use oil & gas industry terminology naturally
-- Be concise but informative
-- If the data shows trends or patterns, highlight them
-- Sound like a human expert, not a computer
-
-Respond naturally and conversationally.
-"""
-            
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a helpful, conversational oil & gas data analyst. Respond naturally like you're talking to a colleague, not like a computer system."
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=800,
-                temperature=0.3
-            )
-            
-            return response.choices[0].message.content.strip()
-            
-        except Exception as e:
-            return self._generate_fallback_response(question, query_result)
-    
-    def _generate_no_data_response(self, question: str, query_result: QueryResult) -> str:
-        """Generate intelligent responses when query succeeds but returns no data."""
-        question_lower = question.lower()
-        
-        # Intelligent no-data responses based on question type
-        if "well" in question_lower and any(name in question_lower for name in ["abc-123", "xyz-456"]):
-            return "I don't see that specific well in our database. The wells I have data for are more like Smith 1H, Jones 2H, Brown 3H, and Wilson 4H. Want me to show you data for any of those?"
-        
-        elif "operator" in question_lower or "company" in question_lower:
-            return "That operator isn't showing up in our data. The main operators I see are Chesapeake Energy, Range Resources, and Cabot Oil. Want to check any of those instead?"
-        
-        elif "county" in question_lower:
-            return "No results for that county. Our database mainly covers Broome, Tioga, and Chemung counties. Should I check one of those?"
-        
-        else:
-            return f"I ran the query for '{question}' but didn't find any matching data. This could mean the specific criteria don't exist in our database, or we might need to adjust the search terms. Want me to show you what data is available?"
-    
-    def _summarize_data(self, df: pd.DataFrame) -> str:
-        """Create a summary of the DataFrame for the LLM."""
-        summary_parts = []
-        
-        # Basic info
-        summary_parts.append(f"Found {len(df)} rows with {len(df.columns)} columns")
-        
-        # Column names
-        summary_parts.append(f"Columns: {', '.join(df.columns.tolist())}")
-        
-        # Show first few rows as examples
-        if len(df) > 0:
-            sample_rows = df.head(min(5, len(df))).to_dict('records')
-            summary_parts.append(f"Sample data: {sample_rows}")
-        
-        # Numeric summaries for key columns
-        numeric_cols = df.select_dtypes(include=['number']).columns
-        if len(numeric_cols) > 0:
-            for col in numeric_cols[:3]:  # Limit to first 3 numeric columns
-                try:
-                    total = df[col].sum()
-                    avg = df[col].mean()
-                    summary_parts.append(f"{col}: Total = {total:,.2f}, Average = {avg:,.2f}")
-                except:
-                    pass
-        
-        return "\n".join(summary_parts)
-    
-    def _generate_fallback_response(self, question: str, query_result: QueryResult) -> str:
-        """Generate a basic response without OpenAI."""
-        df = query_result.data
-        
-        response_parts = [
-            f"Based on your question '{question}', I found {len(df)} records."
+        # Production data indicators
+        production_indicators = [
+            'production', 'prod', 'gas', 'oil', 'water', 
+            'producing', 'monthly', 'total', 'volume'
         ]
         
-        # Add some basic insights
-        if len(df) > 0:
-            numeric_cols = df.select_dtypes(include=['number']).columns
-            if len(numeric_cols) > 0:
-                first_numeric = numeric_cols[0]
-                total = df[first_numeric].sum()
-                response_parts.append(f"The total {first_numeric} is {total:,.2f}.")
+        # Wells master data indicators
+        wells_indicators = [
+            'well', 'depth', 'formation', 'permit', 'drill',
+            'location', 'coordinate', 'status', 'company',
+            'operator', 'horizontal', 'vertical'
+        ]
         
-        response_parts.append(f"Query executed in {query_result.execution_time:.2f} seconds.")
+        # Check for production data needs
+        if any(indicator in question_lower for indicator in production_indicators):
+            relevant_tables.add('production')
         
-        return " ".join(response_parts)
+        # Check for wells data needs
+        if any(indicator in question_lower for indicator in wells_indicators):
+            relevant_tables.add('wells')
+        
+        # If we have both types of indicators, we need both tables
+        analysis_indicators = ['compare', 'by', 'with', 'and', 'total', 'summary']
+        
+        if len(relevant_tables) == 1 and any(indicator in question_lower for indicator in analysis_indicators):
+            relevant_tables.update(['production', 'wells'])
+        
+        # Default to both tables if we can't determine specifically
+        if not relevant_tables:
+            relevant_tables.update(['production', 'wells'])
+        
+        return list(relevant_tables)
     
-    # Include the SQL generation methods from the original DatabaseAssistant
-    def generate_sql_query(self, question: str, relevant_tables: List[str]) -> Tuple[str, str]:
-        """Generate SQL query from natural language question."""
+    def _generate_enhanced_sql(self, question: str, relevant_tables: List[str], needs_join: bool) -> Tuple[str, str]:
+        """Generate SQL with multi-table support."""
         if not self.openai_client:
-            return "", "OpenAI API key not configured. Please set OPENAI_API_KEY in .env file."
+            return "", "OpenAI API key not configured"
         
         try:
-            # Get table schemas for context
-            schema_context = self._build_schema_context(relevant_tables)
-            sample_data_context = self._get_sample_data_context(relevant_tables)
-            prompt = self._build_enhanced_sql_prompt(question, schema_context, sample_data_context)
+            # Get enhanced schema context
+            schema_context = self._build_enhanced_schema_context(relevant_tables)
+            sample_data_context = self._get_enhanced_sample_data(relevant_tables)
+            relationship_context = self._build_relationship_context(relevant_tables)
+            
+            prompt = f"""
+Generate a SQL query for this oil & gas data question:
+
+QUESTION: {question}
+
+AVAILABLE TABLES AND RELATIONSHIPS:
+{schema_context}
+
+SAMPLE DATA:
+{sample_data_context}
+
+TABLE RELATIONSHIPS:
+{relationship_context}
+
+QUERY GUIDELINES:
+- Use proper JOINs when data from multiple tables is needed
+- Join production and wells tables on API_WellNo when appropriate  
+- For production totals, use SUM aggregation
+- For counts, use COUNT
+- Include ORDER BY for top/ranking questions
+- Use LIMIT for performance (1000 max)
+- Always use proper column names from the schema above
+
+Generate only the SQL query that answers the question.
+"""
             
             response = self.openai_client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {
                         "role": "system", 
-                        "content": """You are an expert SQL analyst. Generate ONLY valid SELECT queries that will work with the available data."""
+                        "content": "You are an expert SQL analyst. Generate clean, efficient SQL queries for oil & gas databases."
                     },
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=500,
+                max_tokens=800,
                 temperature=0.1
             )
             
@@ -461,67 +274,351 @@ Respond naturally and conversationally.
         except Exception as e:
             return "", f"Failed to generate SQL query: {str(e)}"
     
-    def _get_sample_data_context(self, table_names: List[str]) -> str:
-        """Get sample data from tables to help AI understand what's available."""
-        sample_context = []
-        
-        for table_name in table_names[:2]:
-            try:
-                sample_query = f"SELECT * FROM {table_name} LIMIT 3"
-                sample_df = self.db_manager.execute_query(sample_query)
-                
-                if not sample_df.empty:
-                    sample_rows = sample_df.to_dict('records')
-                    sample_context.append(f"Sample data from {table_name}:")
-                    for i, row in enumerate(sample_rows, 1):
-                        row_str = ", ".join([f"{k}: {v}" for k, v in row.items() if v is not None])
-                        sample_context.append(f"  Row {i}: {row_str}")
-            except Exception as e:
-                sample_context.append(f"Could not get sample data from {table_name}: {str(e)}")
-        
-        return "\n".join(sample_context)
-    
-    def _build_enhanced_sql_prompt(self, question: str, schema_context: str, sample_data_context: str) -> str:
-        """Build enhanced prompt with sample data context."""
-        db_type = self.db_manager.db_type or 'sqlite'
-        
-        return f"""
-Generate a SQL query to answer this question about oil & gas production data:
-
-QUESTION: {question}
-
-DATABASE TYPE: {db_type}
-
-AVAILABLE TABLES AND COLUMNS:
-{schema_context}
-
-SAMPLE DATA (to understand what's actually available):
-{sample_data_context}
-
-REQUIREMENTS:
-- Use only SELECT statements
-- Base your query on the actual sample data shown above
-- Use exact column names and values from the sample data
-- Keep queries simple and compatible with {db_type}
-- For time-based questions, use actual Year/Month values from the sample data
-- Use appropriate aggregation (SUM, COUNT, AVG) when needed
-- Include ORDER BY and LIMIT for top/ranking questions
-
-Return only the SQL query that will work with this specific data.
-"""
-    
-    def _build_schema_context(self, table_names: List[str]) -> str:
-        """Build schema context for relevant tables."""
+    def _build_enhanced_schema_context(self, table_names: List[str]) -> str:
+        """Build enhanced schema context with relationships."""
         context_parts = []
         
         for table_name in table_names:
             table_info = self.db_manager.get_table_info(table_name)
             if table_info:
                 columns = [f"{col['name']} ({col['type']})" for col in table_info.columns]
-                context_parts.append(f"Table: {table_name}\nColumns: {', '.join(columns)}\nRows: {table_info.row_count or 'Unknown'}")
+                context_parts.append(f"""
+TABLE: {table_name}
+Columns: {', '.join(columns)}
+Rows: {table_info.row_count or 'Unknown'}
+Purpose: {self.table_relationships.get(table_name, {}).get('description', 'Data table')}
+""")
         
-        return "\n\n".join(context_parts)
+        return "\n".join(context_parts)
+    
+    def _get_enhanced_sample_data(self, table_names: List[str]) -> str:
+        """Get enhanced sample data showing relationships."""
+        sample_context = []
+        
+        for table_name in table_names[:2]:
+            try:
+                if table_name == 'production':
+                    sample_query = """
+                    SELECT API_WellNo, County, Operator, Well_Name, 
+                           GasProd, OilProd, WaterProd, Year, Month 
+                    FROM production 
+                    WHERE GasProd > 0 OR OilProd > 0
+                    ORDER BY Year DESC, GasProd DESC 
+                    LIMIT 3
+                    """
+                elif table_name == 'wells':
+                    sample_query = """
+                    SELECT API_WellNo, Well_Name, Company_name, County, 
+                           Well_Status, Well_Type, Producing_formation,
+                           True_vertical_depth, Surface_latitude, Surface_longitude
+                    FROM wells 
+                    WHERE Well_Status != '' 
+                    LIMIT 3
+                    """
+                else:
+                    sample_query = f"SELECT * FROM {table_name} LIMIT 3"
+                
+                sample_df = self.db_manager.execute_query(sample_query)
+                
+                if not sample_df.empty:
+                    sample_rows = sample_df.to_dict('records')
+                    sample_context.append(f"Sample from {table_name}:")
+                    for i, row in enumerate(sample_rows, 1):
+                        row_str = ", ".join([f"{k}: {v}" for k, v in list(row.items())[:6] if v is not None])
+                        sample_context.append(f"  Row {i}: {row_str}")
+                        
+            except Exception as e:
+                sample_context.append(f"Could not sample {table_name}: {str(e)}")
+        
+        return "\n".join(sample_context)
+    
+    def _build_relationship_context(self, table_names: List[str]) -> str:
+        """Build context about table relationships."""
+        if len(table_names) < 2:
+            return "Single table query - no joins needed"
+        
+        relationships = []
+        if 'production' in table_names and 'wells' in table_names:
+            relationships.append("""
+JOIN production p and wells w ON p.API_WellNo = w.API_WellNo
+- This links monthly production data to well master data
+- Allows queries combining production metrics with well attributes
+""")
+        
+        return "\n".join(relationships)
+    
+    def _enhanced_should_display_as_table(self, question: str, df: pd.DataFrame) -> bool:
+        """Enhanced table detection - more aggressive about showing tables."""
+        if df is None:
+            print("DEBUG: No table - df is None")
+            return False
+            
+        if hasattr(df, 'empty') and df.empty:
+            print("DEBUG: No table - df is empty")
+            return False
+        
+        question_lower = question.lower()
+        
+        # ALWAYS show as table for these explicit requests
+        explicit_table_requests = [
+            'show me', 'list', 'display', 'table', 'compare',
+            'top', 'ranking', 'wells', 'production', 'summary',
+            'by county', 'by operator', 'by formation', 'total'
+        ]
+        
+        for indicator in explicit_table_requests:
+            if indicator in question_lower:
+                print(f"DEBUG: Table requested due to indicator: {indicator}")
+                return True
+        
+        # Show as table if we have multiple rows OR multiple meaningful columns
+        if len(df) > 1:
+            print(f"DEBUG: Table requested due to multiple rows: {len(df)}")
+            return True
+        
+        if len(df.columns) >= 3:
+            print(f"DEBUG: Table requested due to multiple columns: {len(df.columns)}")
+            return True
+        
+        # Default: if we got this far and have data, probably show it
+        if len(df) > 0:
+            print(f"DEBUG: Table requested as fallback - has data")
+            return True
+        
+        print(f"DEBUG: No table - no conditions met")
+        return False
+    
+    def _should_display_as_table(self, question: str, df: pd.DataFrame) -> bool:
+        """Determine if response should be displayed as a structured table."""
+        return self._enhanced_should_display_as_table(question, df)
+    
+    def _generate_table_title(self, question: str, df: pd.DataFrame) -> str:
+        """Generate an appropriate title for the table."""
+        question_lower = question.lower()
+        
+        if 'top' in question_lower and 'wells' in question_lower:
+            return "Top Performing Wells"
+        elif 'production' in question_lower and 'county' in question_lower:
+            return "Production by County"
+        elif 'compare' in question_lower:
+            return "Comparison Results"
+        elif 'wells' in question_lower and 'formation' in question_lower:
+            return "Wells by Formation"
+        elif len(df) > 10:
+            return f"Query Results ({len(df)} records)"
+        else:
+            return "Query Results"
+    
+    def _generate_enhanced_response(self, question: str, query_result: QueryResult) -> Dict[str, Any]:
+        """Generate response with both text and structured data - FIXED VERSION."""
+        
+        try:
+            # Debug logging
+            print(f"DEBUG: query_result.success = {query_result.success}")
+            print(f"DEBUG: query_result.data type = {type(query_result.data)}")
+            if query_result.data is not None:
+                print(f"DEBUG: query_result.data shape = {query_result.data.shape}")
+                print(f"DEBUG: query_result.data columns = {list(query_result.data.columns)}")
+            print(f"DEBUG: query_result.display_as_table = {query_result.display_as_table}")
+            print(f"DEBUG: query_result.table_title = {query_result.table_title}")
+            
+            # Handle failures
+            if not query_result.success:
+                return {
+                    'text': self._handle_query_failure(question, query_result.error_message),
+                    'table_data': None,
+                    'table_title': None
+                }
+            
+            # Handle no data - be more permissive here
+            if query_result.data is None:
+                return {
+                    'text': self._handle_no_data_found(question),
+                    'table_data': None,
+                    'table_title': None
+                }
+            
+            # Handle empty DataFrame
+            if hasattr(query_result.data, 'empty') and query_result.data.empty:
+                return {
+                    'text': self._handle_no_data_found(question),
+                    'table_data': None,
+                    'table_title': None
+                }
+            
+            # Generate text response
+            text_response = self._generate_text_response(question, query_result)
+            
+            # ENHANCED TABLE DETECTION - be more aggressive about showing tables
+            should_show_table = self._enhanced_should_display_as_table(question, query_result.data)
+            
+            # FIXED: Always create DataFrame copy to avoid reference issues
+            table_data = None
+            table_title = None
+            
+            if should_show_table and query_result.data is not None:
+                # Create a clean copy of the DataFrame
+                table_data = query_result.data.copy()
+                table_title = query_result.table_title or self._generate_table_title(question, table_data)
+                
+                print(f"DEBUG: Table will be displayed - shape: {table_data.shape}")
+            else:
+                print(f"DEBUG: No table display - should_show_table={should_show_table}")
+            
+            # Return structured response
+            response_data = {
+                'text': text_response,
+                'table_data': table_data,
+                'table_title': table_title
+            }
+            
+            print(f"DEBUG: Final response keys: {list(response_data.keys())}")
+            print(f"DEBUG: Final table_data type: {type(response_data['table_data'])}")
+            
+            return response_data
+            
+        except Exception as e:
+            print(f"ERROR in _generate_enhanced_response: {str(e)}")
+            print(f"ERROR traceback: {traceback.format_exc()}")
+            return {
+                'text': f"I found some data but encountered an issue formatting the response. The query executed successfully but I had trouble presenting the results.",
+                'table_data': None,
+                'table_title': None
+            }
+    
+    def _generate_text_response(self, question: str, query_result: QueryResult) -> str:
+        """Generate conversational text response - FIXED to list all results."""
+        if not self.openai_client:
+            return self._generate_fallback_response(question, query_result)
+        
+        try:
+            # Prepare data summary for the LLM
+            data_summary = self._summarize_enhanced_data(query_result.data)
+            
+            # Check if user asked for a specific list (top X, show me X, etc.)
+            question_lower = question.lower()
+            is_list_request = any(pattern in question_lower for pattern in [
+                'top ', 'show me', 'list', 'display', 'give me'
+            ])
+            
+            # Get actual data to include in response if it's a list request
+            actual_results = ""
+            if is_list_request and not query_result.data.empty:
+                # Include first 15 rows of actual data in the prompt
+                results_sample = query_result.data.head(15)
+                actual_results = f"\nACTUAL RESULTS TO INCLUDE IN RESPONSE:\n{results_sample.to_dict('records')}"
+            
+            prompt = f"""
+You are an expert oil & gas analyst having a conversation with a colleague about data from both production records and wells master data.
+
+QUESTION: {question}
+
+DATA ANALYSIS:
+{data_summary}
+{actual_results}
+
+CONTEXT:
+- Our database now contains both monthly production data and comprehensive well master data
+- We can analyze production performance alongside well characteristics like depth, formation, location, etc.
+- This enables much richer insights combining operational and technical data
+
+RESPONSE STYLE:
+- Be conversational and expert-level
+- If the user asked for a specific list (top X, show X), LIST ALL THE ACTUAL RESULTS - don't use "..." or placeholders
+- When listing results, include the actual well names, operators, and numbers from the data
+- Highlight key findings from the data
+- When appropriate, mention that detailed data is shown in the table below
+- Include relevant oil & gas industry context
+- Be complete but engaging
+
+CRITICAL: If this is a "top X" or "show me X" request, provide the COMPLETE list with actual well names and numbers. Do NOT use "..." or placeholders - list every single result requested.
+
+Respond naturally as a knowledgeable colleague would.
+"""
+            
+            response = self.openai_client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a knowledgeable oil & gas data analyst. When users ask for lists, provide complete actual results, never use '...' placeholders."
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=1000,  # Increased to allow for full lists
+                temperature=0.3
+            )
+            
+            return response.choices[0].message.content.strip()
+            
+        except Exception as e:
+            return self._generate_fallback_response(question, query_result)
+    
+    def _summarize_enhanced_data(self, df: pd.DataFrame) -> str:
+        """Enhanced data summary for multi-table results."""
+        summary_parts = []
+        
+        # Basic info
+        summary_parts.append(f"Dataset: {len(df)} rows, {len(df.columns)} columns")
+        
+        # Column analysis
+        production_cols = [col for col in df.columns if any(prod in col.lower() for prod in ['gas', 'oil', 'water', 'prod'])]
+        well_cols = [col for col in df.columns if any(well in col.lower() for well in ['depth', 'formation', 'status', 'type'])]
+        
+        if production_cols:
+            summary_parts.append(f"Production metrics: {', '.join(production_cols)}")
+        if well_cols:
+            summary_parts.append(f"Well attributes: {', '.join(well_cols)}")
+        
+        # Sample data
+        if len(df) > 0:
+            sample_rows = df.head(3).to_dict('records')
+            summary_parts.append(f"Sample data: {sample_rows}")
+        
+        # Key statistics
+        numeric_cols = df.select_dtypes(include=['number']).columns
+        for col in numeric_cols[:3]:
+            if col in df.columns:
+                total = df[col].sum()
+                avg = df[col].mean()
+                summary_parts.append(f"{col}: Total={total:,.0f}, Average={avg:,.0f}")
+        
+        return "\n".join(summary_parts)
+    
+    def _handle_query_failure(self, question: str, error_message: str) -> str:
+        """Handle query failures conversationally."""
+        if "relative_timeframe" in error_message:
+            return "I need specific dates to query the data. Our database covers production data through 2024. What specific timeframe would you like to analyze?"
+        elif "no_tables_found" in error_message:
+            return "I'm having trouble identifying the right data for your question. Could you be more specific about what you're looking for? I can help with production data, well information, or combined analysis."
+        else:
+            return "I ran into a technical issue processing your query. Could you try rephrasing your question? I can help analyze production data, well characteristics, or combined insights."
+    
+    def _handle_no_data_found(self, question: str) -> str:
+        """Handle no data found scenarios."""
+        return "I didn't find any data matching those criteria. This could be because the specific wells, operators, time periods, or conditions don't exist in our database. Would you like me to show you what data is available?"
+    
+    def _generate_fallback_response(self, question: str, query_result: QueryResult) -> str:
+        """Fallback response when OpenAI is unavailable."""
+        df = query_result.data
+        
+        response_parts = [
+            f"Found {len(df)} records for your question about the data."
+        ]
+        
+        # Add basic insights
+        if len(df) > 0:
+            numeric_cols = df.select_dtypes(include=['number']).columns
+            if len(numeric_cols) > 0:
+                first_numeric = numeric_cols[0]
+                total = df[first_numeric].sum()
+                response_parts.append(f"Total {first_numeric}: {total:,.0f}")
+        
+        if query_result.display_as_table:
+            response_parts.append("Detailed results are shown in the table below.")
+        
+        return " ".join(response_parts)
 
 
-# Compatibility alias for existing code
-DatabaseAssistant = ExpertDatabaseAssistant
+# Backward compatibility
+DatabaseAssistant = MultiTableDatabaseAssistant

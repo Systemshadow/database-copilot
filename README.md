@@ -1,167 +1,167 @@
-# Database Copilot 🤖
+# Database Copilot - AI-Powered Oil & Gas Data Analysis
 
-AI-powered database assistant for oil & gas companies. Ask questions about your production data in plain English and get intelligent, conversational responses.
+Transform your oil & gas data into insights through natural language queries. Ask questions in plain English and get intelligent responses with professional table displays.
 
-## ✨ Features
+## Live Product Demo
 
-- **Natural Language Queries**: Ask questions like "What was the production for well ABC-123 in January 2023?"
-- **Intelligent Responses**: Get conversational answers with context and insights
-- **Multi-Database Support**: Works with SQL Server, PostgreSQL, MySQL, Oracle
-- **Safe Querying**: Only allows read-only SELECT queries
-- **Auto Schema Discovery**: Automatically learns your database structure
+**Try the interactive demo**: [https://database-copilot-ddmyeyubwl22mzb7jjgj9c.streamlit.app/](https://database-copilot-ddmyeyubwl22mzb7jjgj9c.streamlit.app/)
 
-## 🚀 Quick Start
+*Demo uses NY DEC oil & gas data to showcase product capabilities with your production and wells databases.*
 
-### 1. Install Dependencies
+## Product Features
+
+- **Natural Language Interface**: Ask data questions in plain English
+- **Multi-Database Support**: Works with SQL Server, PostgreSQL, MySQL, Oracle, and more
+- **AI-Powered Analysis**: GPT-4 converts questions to optimized SQL queries
+- **Professional Output**: Results displayed in formatted, exportable tables  
+- **Cross-Dataset Intelligence**: Automatically joins production and wells data when needed
+- **Industry Context**: Responses include relevant oil & gas domain knowledge
+- **Enterprise Ready**: Secure, read-only database access with safety validation
+
+## How It Works
+
+1. **Connect to Your Database**: Point to your existing production/wells database
+2. **Ask Questions Naturally**: "Show me top producing wells" or "Compare production by formation"  
+3. **Get Intelligent Responses**: AI analyzes your data and provides insights with tables
+4. **Export Results**: Download analysis as CSV for further use
+
+## Demo Dataset (NY DEC)
+
+The live demo showcases capabilities using New York Department of Environmental Conservation data:
+
+- **67,812 production records** (2020-2024) - Oil, gas, water production by well/month
+- **47,111 wells records** - Technical data including depths, formations, coordinates
+- **Multi-table analysis** - Production metrics combined with well characteristics
+
+## Example Business Questions
+
+### Production Analysis
+- "What are our top 10 producing wells this quarter?"
+- "Show total gas production by county and operator"  
+- "Which fields had declining production last year?"
+- "Compare our oil vs gas production trends"
+
+### Operational Intelligence
+- "Show production for all horizontal wells in [Field Name]"
+- "Which wells over 8,000 ft depth are underperforming?"
+- "What's the average production by completion type?"
+- "Find wells with unusual water production patterns"
+
+### Strategic Analysis
+- "Compare our performance vs regional averages"
+- "Which formations show the best EUR potential?"
+- "Analyze production decline curves by well type"
+- "Show ROI by drilling program and vintage"
+
+## Supported Database Types
+
+- **Microsoft SQL Server** (Most common in O&G)
+- **PostgreSQL**
+- **MySQL/MariaDB**
+- **Oracle Database**  
+- **SQLite** (For testing/demos)
+
+## Enterprise Deployment
+
+### Database Connection
+```env
+DATABASE_TYPE=sqlserver
+DATABASE_HOST=your-server.company.com
+DATABASE_NAME=ProductionDB
+DATABASE_USER=readonly_user
+DATABASE_PASSWORD=secure_password
+```
+
+### Security Features
+- **Read-Only Access**: Only SELECT queries allowed
+- **SQL Injection Protection**: All queries validated before execution
+- **Local Processing**: No data leaves your environment
+- **Audit Trail**: All queries logged for compliance
+
+## Quick Start (Evaluation)
+
+### 1. Clone Repository
+```bash
+git clone [repository-url]
+cd ai-oilwell-prototype
+```
+
+### 2. Install Dependencies  
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configure Environment
-Create a `.env` file with your database and API credentials:
-
+### 3. Configure Database
+Create `.env` file pointing to your database:
 ```env
-# OpenAI API Configuration (required for AI responses)
-OPENAI_API_KEY=your_openai_api_key_here
-
-# Database Configuration
+OPENAI_API_KEY=your_api_key
 DATABASE_TYPE=sqlserver
-DATABASE_HOST=your_db_server.company.com
-DATABASE_PORT=1433
-DATABASE_NAME=ProductionDB
-DATABASE_USER=your_username
+DATABASE_HOST=your_server.company.com  
+DATABASE_NAME=your_production_db
+DATABASE_USER=readonly_user
 DATABASE_PASSWORD=your_password
-
-# Optional: Company name for branding
-COMPANY_NAME=Your Oil & Gas Company
 ```
 
-### 3. Test Configuration
-```bash
-python test_connection.py
-```
-
-### 4. Launch Application
+### 4. Run Application
 ```bash
 streamlit run app.py
 ```
 
-## 🔧 Database Configuration
+## Architecture
 
-### SQL Server
-```env
-DATABASE_TYPE=sqlserver
-DATABASE_HOST=server.company.com
-DATABASE_PORT=1433
-DATABASE_NAME=ProductionDB
-DATABASE_USER=username
-DATABASE_PASSWORD=password
+**Multi-Database Design**
+```
+Database Copilot
+├── Universal Database Connector (SQL Server, PostgreSQL, MySQL, Oracle)
+├── AI Query Engine (GPT-4 powered SQL generation)  
+├── Schema Discovery (Automatic table/column detection)
+├── Safety Layer (Read-only validation and injection protection)
+└── Professional UI (Tables, exports, industry context)
 ```
 
-### PostgreSQL
-```env
-DATABASE_TYPE=postgresql
-DATABASE_HOST=server.company.com
-DATABASE_PORT=5432
-DATABASE_NAME=production_db
-DATABASE_USER=username
-DATABASE_PASSWORD=password
-```
+**Your Data Stays Secure**
+- Connects directly to your existing database
+- No data upload or cloud storage required
+- All processing happens in your environment
+- Uses your existing database security and permissions
 
-### MySQL
-```env
-DATABASE_TYPE=mysql
-DATABASE_HOST=server.company.com
-DATABASE_PORT=3306
-DATABASE_NAME=production_db
-DATABASE_USER=username
-DATABASE_PASSWORD=password
-```
+## ROI for Oil & Gas Companies
 
-### Windows Authentication (SQL Server)
-```env
-DATABASE_TYPE=sqlserver
-DATABASE_HOST=server.company.com
-DATABASE_NAME=ProductionDB
-DATABASE_TRUSTED_CONNECTION=yes
-```
+- **Faster Analysis**: Minutes instead of hours for complex queries
+- **Broader Access**: Non-technical staff can query production data  
+- **Better Decisions**: AI provides context and identifies patterns
+- **Reduced IT Load**: Self-service analytics reduces database admin requests
+- **Standardized Reporting**: Consistent analysis across teams
 
-## 💬 Example Questions
+## Demo vs Production
 
-- "What was the oil production for well ABC-123 in January 2023?"
-- "Show me the top 10 producing wells last month"
-- "What's the total gas production for Chesapeake Energy in 2023?"
-- "Which county had the highest water production last year?"
-- "How did production change for well XYZ-456 over the last 6 months?"
+**This Demo Shows:**
+- Core product functionality with real O&G data
+- Natural language query capabilities  
+- Multi-table analysis features
+- Professional output formatting
 
-## 📊 Database Schema Tips
+**Your Production Deployment Gets:**
+- Connection to YOUR database (SQL Server, PostgreSQL, etc.)
+- YOUR data, YOUR wells, YOUR production history
+- Customized for YOUR field names and data structure
+- Integration with YOUR existing database security
 
-The system works best with oil & gas databases that have common column patterns:
+## Technical Requirements
 
-- **Well Identifiers**: `API_Well_No`, `Well_ID`, `UWI`
-- **Dates**: `Production_Date`, `Report_Date`, `Month_Year`
-- **Production**: `Oil_Prod`, `Gas_Prod`, `Water_Prod`
-- **Operators**: `Operator_Name`, `Company_Name`
-- **Locations**: `County`, `Field_Name`, `Township_Range`
+- **Database**: SQL Server 2016+, PostgreSQL 10+, MySQL 5.7+, Oracle 12c+
+- **Network**: ODBC/JDBC connectivity to database server
+- **Security**: Read-only database user account
+- **API**: OpenAI API key for AI-powered analysis
 
-## 🔒 Security
+## Contact for Enterprise Deployment
 
-- **Read-Only**: Only SELECT queries are allowed
-- **SQL Injection Protection**: All queries are validated for safety
-- **Local Processing**: Data stays in your environment
-- **Configurable Access**: Use database user with read-only permissions
+Ready to see Database Copilot analyze YOUR oil & gas data? 
 
-## 🛠️ Troubleshooting
+- **Schedule Demo**: See it work with your actual database
+- **Pilot Program**: 30-day evaluation with your data
+- **Custom Integration**: Tailored for your data schema and workflows
 
-### Connection Issues
-1. Verify your `.env` file has correct database credentials
-2. Ensure database server is accessible from your network
-3. Check firewall settings and database port accessibility
-4. Run `python test_connection.py` to diagnose issues
+---
 
-### AI Response Issues
-1. Verify `OPENAI_API_KEY` is set correctly
-2. Check your OpenAI account has sufficient credits
-3. Ensure internet connectivity for OpenAI API calls
-
-### Query Issues
-1. Check that your database has expected table/column names
-2. Run "Discover Schema" to see available tables
-3. Try more specific questions with exact table/column names
-
-## 📁 Project Structure
-
-```
-database-copilot/
-├── app.py                  # Main Streamlit application
-├── requirements.txt        # Python dependencies
-├── .env                   # Environment configuration
-├── test_connection.py     # Configuration test script
-└── app_utils/
-    ├── database.py        # Database connection & schema discovery
-    └── ai_assistant.py    # AI-powered query generation & responses
-```
-
-## 🔄 Development
-
-To add new features or customize for your specific database:
-
-1. **Custom Query Patterns**: Modify `ai_assistant.py` to add domain-specific query logic
-2. **Database-Specific Optimizations**: Update `database.py` for your database type
-3. **Response Formatting**: Customize the AI response generation in `DatabaseAssistant`
-
-## 📞 Support
-
-For issues or customization requests, check:
-1. Configuration with `test_connection.py`
-2. Streamlit logs for detailed error messages
-3. Database connection logs
-4. OpenAI API status and usage
-
-## 🚀 Future Enhancements
-
-- Interactive charts and visualizations
-- Query result export (CSV, Excel)
-- Query history and favorites
-- Role-based access control
-- Custom report generation
+**Database Copilot: Transform your oil & gas data from complex queries to conversational insights.**

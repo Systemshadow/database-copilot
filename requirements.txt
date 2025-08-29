@@ -3,13 +3,11 @@ python-dotenv>=1.0.0
 openai>=1.30.0
 pandas>=2.0.0
 sqlalchemy>=2.0.0
-requests>=2.31.0
 
-# Database drivers
-pyodbc>=4.0.0
-psycopg2-binary>=2.9.0
-pymysql>=1.1.0
-cx-Oracle>=8.3.0
+# Enterprise Database Drivers
+pyodbc>=4.0.0          # SQL Server
+psycopg2-binary>=2.9.0  # PostgreSQL
+pymysql>=1.1.0          # MySQL
+cx-Oracle>=8.3.0        # Oracle
 
-# For demo database (SQLite is built-in to Python)
-# No additional SQLite dependencies needed
+# Demo includes SQLite (built-in to Python)

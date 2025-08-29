@@ -1,11 +1,13 @@
 """
-Database Copilot - AI-Powered Database Assistant
-Ask questions about your oil & gas database in natural language.
+Enhanced Database Copilot with Multi-Table Support and Structured Display
+Complete version with production + wells data and professional table display.
+Real NY DEC data analysis with AI-powered queries.
 """
 
 import streamlit as st
 import sys
 import os
+import pandas as pd
 from pathlib import Path
 
 # Add project root to path
@@ -14,7 +16,7 @@ sys.path.insert(0, str(project_root))
 
 try:
     from app_utils.database import db_manager
-    from app_utils.ai_assistant import DatabaseAssistant
+    from app_utils.ai_assistant import MultiTableDatabaseAssistant
 except ImportError as e:
     st.error(f"Import error: {e}")
     st.error("Please ensure all files are in the correct directory structure.")
@@ -24,11 +26,62 @@ except ImportError as e:
 def initialize_app():
     """Initialize the application and database connection."""
     st.set_page_config(
-        page_title="Database Copilot",
+        page_title="Database Copilot - Enhanced",
         page_icon="🤖",
         layout="wide",
         initial_sidebar_state="expanded"
     )
+    
+    # Apply custom CSS for professional styling
+    st.markdown("""
+    <style>
+    .main-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 2rem;
+        border-radius: 10px;
+        color: white;
+        margin-bottom: 2rem;
+        text-align: center;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .metric-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 15px;
+        text-align: center;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        margin-bottom: 1rem;
+    }
+    
+    .feature-highlight {
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        padding: 1rem;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+        border-left: 4px solid #2196F3;
+    }
+    
+    .status-connected {
+        background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+        color: white;
+        padding: 0.8rem;
+        border-radius: 8px;
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+    
+    .status-disconnected {
+        background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+        color: white;
+        padding: 0.8rem;
+        border-radius: 8px;
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     
     # Initialize session state
     if 'db_connected' not in st.session_state:
@@ -42,28 +95,38 @@ def initialize_app():
 
 
 def connect_to_database():
-    """Handle database connection."""
+    """Handle database connection with enhanced UI."""
     with st.sidebar:
         st.header("🔌 Database Connection")
         
         if not st.session_state.db_connected:
-            st.warning("Not connected to database")
+            st.markdown("""
+            <div class="status-disconnected">
+                <h4>⚠️ Not Connected</h4>
+                <p>Connect to access enhanced features</p>
+            </div>
+            """, unsafe_allow_html=True)
             
-            if st.button("🔗 Connect to Database", type="primary"):
-                with st.spinner("Connecting to database..."):
+            if st.button("🔗 Connect to Enhanced Database", type="primary", use_container_width=True):
+                with st.spinner("Connecting to NY DEC database..."):
                     success = db_manager.connect()
                     
                 if success:
                     st.session_state.db_connected = True
-                    st.session_state.assistant = DatabaseAssistant(db_manager)
-                    st.success("✅ Connected successfully!")
+                    st.session_state.assistant = MultiTableDatabaseAssistant(db_manager)
+                    st.success("✅ Connected to real NY DEC data!")
                     st.rerun()
                 else:
-                    st.error("❌ Connection failed. Check your .env configuration.")
+                    st.error("❌ Connection failed. Check your database configuration.")
         else:
-            st.success("✅ Connected to database")
+            st.markdown("""
+            <div class="status-connected">
+                <h4>✅ Connected</h4>
+                <p>NY DEC Production + Wells Data</p>
+            </div>
+            """, unsafe_allow_html=True)
             
-            if st.button("🔄 Refresh Connection"):
+            if st.button("🔄 Refresh Connection", use_container_width=True):
                 db_manager.close()
                 st.session_state.db_connected = False
                 st.session_state.assistant = None
@@ -72,83 +135,206 @@ def connect_to_database():
 
 
 def discover_schema():
-    """Handle schema discovery."""
+    """Handle schema discovery with enhanced display."""
     if st.session_state.db_connected and not st.session_state.schema_discovered:
         with st.sidebar:
-            st.header("📊 Database Schema")
+            st.header("📊 Database Analysis")
             
-            if st.button("🔍 Discover Schema"):
-                with st.spinner("Analyzing database schema..."):
+            if st.button("🔍 Analyze Database Schema", use_container_width=True):
+                with st.spinner("Analyzing NY DEC database structure..."):
                     try:
                         tables = db_manager.discover_schema()
                         st.session_state.schema_discovered = True
-                        st.success(f"Found {len(tables)} tables")
+                        st.success(f"✅ Analyzed {len(tables)} tables")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Schema discovery failed: {str(e)}")
+                        st.error(f"Schema analysis failed: {str(e)}")
     
     elif st.session_state.schema_discovered:
         with st.sidebar:
-            st.header("📊 Database Schema")
+            st.header("📊 NY DEC Database")
             
-            # Show table summary
+            # Show enhanced table information
             tables = list(db_manager.schema_cache.values())
             
-            with st.expander(f"📋 Tables ({len(tables)})", expanded=False):
-                for table in tables[:10]:  # Limit display
-                    st.write(f"**{table.name}** ({table.row_count:,} rows)" if table.row_count else f"**{table.name}**")
+            # Database statistics
+            total_records = sum(table.row_count or 0 for table in tables)
+            
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>{total_records:,}</h3>
+                <p>Total Records</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            with st.expander(f"📋 Tables ({len(tables)})", expanded=True):
+                for table in tables:
+                    if table.name == 'production':
+                        icon = "📈"
+                        desc = "Monthly production data (2020-2024)"
+                        color = "#4CAF50"
+                    elif table.name == 'wells':
+                        icon = "🛢️"
+                        desc = "Complete well registry & technical data"
+                        color = "#2196F3"
+                    else:
+                        icon = "📊"
+                        desc = "Data table"
+                        color = "#666"
                     
-                    # Show first few columns
-                    col_names = [col['name'] for col in table.columns[:5]]
-                    st.caption(f"Columns: {', '.join(col_names)}{'...' if len(table.columns) > 5 else ''}")
+                    st.markdown(f"""
+                    <div style="padding: 0.5rem; margin-bottom: 0.5rem; border-left: 3px solid {color}; background-color: #f8f9fa;">
+                        <strong>{icon} {table.name}</strong><br>
+                        <span style="color: #666; font-size: 0.9rem;">{table.row_count:,} records</span><br>
+                        <span style="color: #888; font-size: 0.8rem;">{desc}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            # Show enhanced capabilities
+            with st.expander("🎯 Enhanced Capabilities", expanded=False):
+                capabilities = [
+                    "✅ Real NY DEC production data (2020-2024)",
+                    "✅ Complete well registry (47K+ wells)",
+                    "✅ Cross-dataset analysis & JOINs",
+                    "✅ AI-powered SQL generation",
+                    "✅ Professional table display",
+                    "✅ CSV export functionality"
+                ]
+                for cap in capabilities:
+                    st.write(cap)
 
 
-def chat_interface():
-    """Main chat interface."""
+def enhanced_chat_interface():
+    """Enhanced chat interface with professional table display."""
     if not st.session_state.db_connected:
         st.warning("Please connect to your database first using the sidebar.")
         return
     
     if not st.session_state.schema_discovered:
-        st.info("💡 Tip: Click 'Discover Schema' in the sidebar to analyze your database structure first.")
+        st.info("💡 Tip: Click 'Analyze Database Schema' in the sidebar to unlock enhanced features.")
     
-    st.title("🤖 Database Copilot")
-    st.markdown("Ask questions about your oil & gas data in plain English. I'll query your database and provide intelligent answers.")
+    # Enhanced header
+    st.markdown("""
+    <div class="main-header">
+        <h1>🤖 Database Copilot</h1>
+        <p>AI-Powered Analysis of NY DEC Oil & Gas Data</p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # Updated example questions that match your actual database
-    with st.expander("💡 Example Questions", expanded=True):
-        examples = [
-            "How many wells are in the database?",
-            "Show me the top 10 producing wells in 2023",
-            "What was the total oil production in 2023?",
-            "What was the production for well XTO-6313H in 2023?",
-            "Compare production between XTO-6313H and WPX-8369H",
-            "What's the total production for XTO Energy Inc in 2023?",
-            "How many wells does XTO Energy Inc operate?",
-            "Show me all wells in Genesee County",
-        ]
+    st.markdown("Ask questions about **production data** and **well information** from the NY Department of Environmental Conservation. I can analyze both datasets together and show results as professional tables!")
+    
+    # Enhanced example questions organized by category
+    with st.expander("💡 Enhanced Query Examples", expanded=True):
         
-        cols = st.columns(2)
-        for i, example in enumerate(examples):
-            with cols[i % 2]:
-                if st.button(example, key=f"example_{i}", use_container_width=True):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 📈 Production Analysis")
+            production_examples = [
+                "Show me the top 10 producing wells in 2024",
+                "What was the total gas production by county?",
+                "Compare oil vs gas production for all wells",
+                "Which operators had the highest production in 2023?"
+            ]
+            
+            for i, example in enumerate(production_examples):
+                if st.button(example, key=f"prod_{i}", use_container_width=True):
+                    st.session_state.current_question = example
+        
+        with col2:
+            st.markdown("### 🛢️ Cross-Dataset Analysis")
+            cross_examples = [
+                "Show production for horizontal wells in Broome County",
+                "Which wells have the highest production and what are their depths?",
+                "Compare production by formation type",
+                "Show all active wells with their 2024 production totals"
+            ]
+            
+            for i, example in enumerate(cross_examples):
+                if st.button(example, key=f"cross_{i}", use_container_width=True):
                     st.session_state.current_question = example
     
-    # Chat history display
+    # Chat history display with enhanced formatting
     chat_container = st.container()
     
     with chat_container:
-        for i, (question, response) in enumerate(st.session_state.chat_history):
+        for i, (question, response_data) in enumerate(st.session_state.chat_history):
             # User question
             with st.chat_message("user"):
                 st.write(question)
             
-            # Assistant response
+            # Assistant response with enhanced display
             with st.chat_message("assistant"):
-                st.write(response)
+                # Always show the conversational text
+                st.write(response_data['text'])
+                
+                # Show table if available with enhanced formatting
+                if response_data.get('table_data') is not None:
+                    df = response_data['table_data']
+                    title = response_data.get('table_title', 'Results')
+                    
+                    st.markdown(f"### 📊 {title}")
+                    
+                    # Display the table with enhanced formatting
+                    if len(df) > 0:
+                        # Format display data for professional presentation
+                        display_df = df.copy()
+                        
+                        # Enhanced formatting for oil & gas data
+                        for col in display_df.columns:
+                            col_lower = col.lower()
+                            # Format production numbers
+                            if any(prod in col_lower for prod in ['prod', 'total', 'gas', 'oil', 'water', 'mcf', 'bbl']):
+                                if display_df[col].dtype in ['int64', 'float64']:
+                                    display_df[col] = display_df[col].apply(
+                                        lambda x: f"{x:,}" if pd.notnull(x) and x != 0 else "0"
+                                    )
+                            # Format depths with units
+                            elif 'depth' in col_lower and display_df[col].dtype in ['int64', 'float64']:
+                                display_df[col] = display_df[col].apply(
+                                    lambda x: f"{x:,.0f} ft" if pd.notnull(x) and x > 0 else "N/A"
+                                )
+                            # Format ratios
+                            elif 'ratio' in col_lower and display_df[col].dtype in ['float64']:
+                                display_df[col] = display_df[col].apply(
+                                    lambda x: f"{x:.4f}" if pd.notnull(x) else "N/A"
+                                )
+                        
+                        # Professional table display
+                        st.dataframe(
+                            display_df,
+                            use_container_width=True,
+                            hide_index=True,
+                            height=400
+                        )
+                        
+                        # Enhanced table information
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Records", len(df))
+                        with col2:
+                            st.metric("Columns", len(df.columns))
+                        with col3:
+                            if len(df) > 10:
+                                st.info("Click column headers to sort")
+                            else:
+                                st.success("Complete results")
+                        
+                        # Professional export option
+                        csv = df.to_csv(index=False)
+                        st.download_button(
+                            label="📥 Export to CSV",
+                            data=csv,
+                            file_name=f"ny_dec_query_results_{i+1}.csv",
+                            mime="text/csv",
+                            key=f"download_{i}",
+                            use_container_width=True
+                        )
+                    else:
+                        st.info("Query executed successfully but returned no data.")
     
-    # Question input
-    question = st.chat_input("Ask a question about your database...")
+    # Enhanced question input
+    question = st.chat_input("Ask a question about NY DEC production or wells data...")
     
     # Handle example button clicks
     if 'current_question' in st.session_state:
@@ -156,38 +342,109 @@ def chat_interface():
         del st.session_state.current_question
     
     if question:
-        # Add user question to chat
+        # Add user question to chat immediately for better UX
         with chat_container:
             with st.chat_message("user"):
                 st.write(question)
         
-        # Generate response
+        # Generate and show response with professional handling
         with chat_container:
             with st.chat_message("assistant"):
-                with st.spinner("Thinking..."):
+                with st.spinner("🧠 Analyzing NY DEC database..."):
                     try:
-                        response = st.session_state.assistant.ask_question(question)
-                        st.write(response)
+                        # Get enhanced response (with potential table data)
+                        response_data = st.session_state.assistant.ask_question(question)
+                        
+                        # Display conversational response
+                        st.write(response_data['text'])
+                        
+                        # Display table if present with enhanced formatting
+                        if response_data.get('table_data') is not None:
+                            df = response_data['table_data']
+                            title = response_data.get('table_title', 'Query Results')
+                            
+                            st.markdown(f"### 📊 {title}")
+                            
+                            if len(df) > 0:
+                                # Professional data formatting
+                                display_df = df.copy()
+                                
+                                # Enhanced formatting for oil & gas industry data
+                                for col in display_df.columns:
+                                    col_lower = col.lower()
+                                    # Format production numbers with industry standards
+                                    if any(prod in col_lower for prod in ['prod', 'total', 'gas', 'oil', 'water', 'mcf', 'bbl']):
+                                        if display_df[col].dtype in ['int64', 'float64']:
+                                            display_df[col] = display_df[col].apply(
+                                                lambda x: f"{x:,}" if pd.notnull(x) and x != 0 else "0"
+                                            )
+                                    # Format depths with units
+                                    elif 'depth' in col_lower and display_df[col].dtype in ['int64', 'float64']:
+                                        display_df[col] = display_df[col].apply(
+                                            lambda x: f"{x:,.0f} ft" if pd.notnull(x) and x > 0 else "N/A"
+                                        )
+                                    # Format counts
+                                    elif 'count' in col_lower and display_df[col].dtype in ['int64']:
+                                        display_df[col] = display_df[col].apply(
+                                            lambda x: f"{x:,}" if pd.notnull(x) else "0"
+                                        )
+                                
+                                # Professional table display
+                                st.dataframe(
+                                    display_df,
+                                    use_container_width=True,
+                                    hide_index=True,
+                                    height=400
+                                )
+                                
+                                # Professional metrics display
+                                col1, col2, col3 = st.columns(3)
+                                with col1:
+                                    st.metric("📊 Records", len(df))
+                                with col2:
+                                    st.metric("📋 Columns", len(df.columns))
+                                with col3:
+                                    if len(df) > 10:
+                                        st.info("Sortable columns")
+                                    else:
+                                        st.success("Complete dataset")
+                                
+                                # Professional export
+                                csv = df.to_csv(index=False)
+                                st.download_button(
+                                    label="📥 Export Results to CSV",
+                                    data=csv,
+                                    file_name="ny_dec_analysis_results.csv",
+                                    mime="text/csv",
+                                    use_container_width=True
+                                )
+                            else:
+                                st.info("Query completed successfully but returned no matching records.")
                         
                         # Add to chat history
-                        st.session_state.chat_history.append((question, response))
+                        st.session_state.chat_history.append((question, response_data))
                         
                     except Exception as e:
-                        error_msg = f"Sorry, I encountered an error: {str(e)}"
+                        error_msg = f"I encountered an error while analyzing the data: {str(e)}"
                         st.error(error_msg)
-                        st.session_state.chat_history.append((question, error_msg))
+                        
+                        # Add error to history for continuity
+                        error_response = {
+                            'text': error_msg,
+                            'table_data': None,
+                            'table_title': None
+                        }
+                        st.session_state.chat_history.append((question, error_response))
 
 
 def configuration_panel():
-    """Show configuration status and tips."""
+    """Show configuration status and enhanced features safely."""
     with st.sidebar:
-        st.header("⚙️ Configuration")
+        st.header("⚙️ System Status")
         
-        # Check environment variables
+        # Check non-sensitive configuration
         env_vars = {
-            "OpenAI API Key": os.getenv('OPENAI_API_KEY', '').replace('your_openai_api_key_here', ''),
-            "Database Host": os.getenv('DATABASE_HOST'),
-            "Database Name": os.getenv('DATABASE_NAME'),
+            "Database": os.getenv('DATABASE_NAME'),
             "Database Type": os.getenv('DATABASE_TYPE')
         }
         
@@ -197,50 +454,78 @@ def configuration_panel():
             else:
                 st.error(f"❌ {var_name}")
         
-        if st.button("📋 Show Config Help"):
-            show_config_help()
-
-
-def show_config_help():
-    """Show configuration help modal."""
-    st.info("""
-    **Required Environment Variables (.env file):**
-    
-    ```
-    OPENAI_API_KEY=your_actual_api_key
-    DATABASE_TYPE=sqlserver
-    DATABASE_HOST=your_server.com
-    DATABASE_NAME=ProductionDB
-    DATABASE_USER=your_username
-    DATABASE_PASSWORD=your_password
-    ```
-    
-    **Supported Database Types:**
-    - sqlserver (SQL Server)
-    - postgresql (PostgreSQL)
-    - mysql (MySQL)
-    - oracle (Oracle)
-    - sqlite (Local testing)
-    """)
+        # Show AI status safely (without exposing keys)
+        ai_enabled = False
+        try:
+            if hasattr(st, 'secrets') and 'OPENAI_API_KEY' in st.secrets:
+                ai_enabled = True
+        except:
+            pass
+        
+        if not ai_enabled:
+            api_key = os.getenv('OPENAI_API_KEY')
+            if api_key and api_key != 'your_openai_api_key_here':
+                ai_enabled = True
+        
+        if ai_enabled:
+            st.success("✅ AI Analysis Enabled")
+        else:
+            st.warning("⚠️ AI Features Limited")
+        
+        # Enhanced features status
+        st.markdown("---")
+        st.markdown("### 🎯 Professional Features")
+        
+        features = [
+            ("Multi-table queries", "✅"),
+            ("NY DEC Production data", "✅"), 
+            ("NY DEC Wells registry", "✅"),
+            ("Cross-dataset analysis", "✅"),
+            ("Professional tables", "✅"),
+            ("CSV export", "✅"),
+            ("Real industry data", "✅")
+        ]
+        
+        for feature, status in features:
+            st.write(f"{status} {feature}")
 
 
 def main():
-    """Main application entry point."""
+    """Enhanced main application entry point."""
     initialize_app()
     
-    # Sidebar components
+    # Enhanced sidebar header
+    st.sidebar.markdown("# 🚀 Database Copilot")
+    st.sidebar.markdown("*NY DEC Oil & Gas Data Analysis*")
+    st.sidebar.markdown("---")
+    
+    # Core application components
     connect_to_database()
     discover_schema()
     configuration_panel()
     
-    # Main chat interface
-    chat_interface()
+    # Main enhanced chat interface
+    enhanced_chat_interface()
     
-    # Footer
+    # Professional footer with database statistics
     st.markdown("---")
-    st.markdown(
-        f"**Database Copilot** - AI-powered database assistant for {os.getenv('COMPANY_NAME', 'your company')}"
-    )
+    company_name = os.getenv('COMPANY_NAME', 'NY DEC Data Analysis')
+    st.markdown(f"**Enhanced Database Copilot** - AI-powered analysis of real NY DEC oil & gas data for {company_name}")
+    
+    # Show live statistics if connected
+    if st.session_state.db_connected and st.session_state.schema_discovered:
+        tables = list(db_manager.schema_cache.values())
+        total_records = sum(table.row_count or 0 for table in tables)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Database Tables", len(tables))
+        with col2:
+            st.metric("Total Records", f"{total_records:,}")
+        with col3:
+            st.metric("Data Span", "2020-2024")
+        
+        st.caption("Real NY Department of Environmental Conservation production and wells data • Enhanced multi-table analysis capabilities")
 
 
 if __name__ == "__main__":
