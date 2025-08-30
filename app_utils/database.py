@@ -1,6 +1,5 @@
 """
 Database connection and schema management for Database Copilot.
-PRODUCTION-READY: Handles both local .env and Streamlit Cloud secrets.
 Supports multiple database types with intelligent schema discovery.
 """
 
@@ -11,14 +10,6 @@ from sqlalchemy import create_engine, text, inspect
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 from dotenv import load_dotenv
-from pathlib import Path
-
-# Try to import streamlit for secrets (will fail in non-Streamlit environments)
-try:
-    import streamlit as st
-    STREAMLIT_AVAILABLE = True
-except ImportError:
-    STREAMLIT_AVAILABLE = False
 
 load_dotenv()
 
@@ -52,153 +43,46 @@ class DatabaseManager:
         self.db_type = None
         self.schema_cache = {}
         
-    def _get_config_value(self, key: str, default: str = None) -> Optional[str]:
-        """
-        Get configuration value from Streamlit secrets or environment variables.
-        Streamlit Cloud: Uses st.secrets
-        Local development: Uses .env file
-        """
-        # Try Streamlit secrets first (for cloud deployment)
-        if STREAMLIT_AVAILABLE:
-            try:
-                if hasattr(st, 'secrets') and key in st.secrets:
-                    value = st.secrets[key]
-                    if value:  # Handle empty strings
-                        return str(value)
-            except Exception as e:
-                # Secrets might not be available in local development
-                pass
-        
-        # Fallback to environment variables (for local development)
-        value = os.getenv(key, default)
-        return value if value else default
-    
-    def _resolve_database_path(self, db_name: str) -> str:
-        """
-        Resolve database file path for different environments.
-        Handles both local development and Streamlit Cloud deployment.
-        """
-        if not db_name:
-            raise ValueError("Database name is required")
-        
-        # If it's already an absolute path, use it
-        if os.path.isabs(db_name):
-            print(f"Using absolute database path: {db_name}")
-            return db_name
-        
-        # For relative paths, try different locations
-        current_dir = os.getcwd()
-        project_root = Path(__file__).parent.parent
-        
-        possible_paths = [
-            db_name,  # Current directory
-            os.path.join(current_dir, db_name),  # Explicit current directory
-            os.path.join(project_root, db_name),  # Project root
-        ]
-        
-        # In Streamlit Cloud, try the mount path
-        if STREAMLIT_AVAILABLE:
-            cloud_paths = [
-                f"/mount/src/database-copilot/{db_name}",
-                f"/app/{db_name}",
-                f"/home/appuser/{db_name}"
-            ]
-            possible_paths = cloud_paths + possible_paths
-        
-        print(f"Searching for database file: {db_name}")
-        print(f"Current working directory: {current_dir}")
-        
-        # Find the first path that exists
-        for path in possible_paths:
-            print(f"Checking path: {path}")
-            if os.path.exists(path):
-                print(f"✅ Database found at: {path}")
-                return path
-        
-        # If no existing file found, use the most appropriate path for creation
-        if STREAMLIT_AVAILABLE:
-            # In Streamlit Cloud, prefer the mount path
-            final_path = f"/mount/src/database-copilot/{db_name}"
-        else:
-            # Local development, use project root
-            final_path = os.path.join(project_root, db_name)
-        
-        print(f"⚠️ Database not found. Will use: {final_path}")
-        return final_path
-        
     def connect(self) -> bool:
         """
-        Establish database connection based on configuration.
-        Supports both local .env and Streamlit Cloud secrets.
+        Establish database connection based on environment variables.
         
         Returns:
             bool: True if connection successful
         """
         try:
-            print("🔌 Attempting database connection...")
-            print(f"Streamlit available: {STREAMLIT_AVAILABLE}")
-            
             # Check for full connection string first
-            conn_string = self._get_config_value('DATABASE_CONNECTION_STRING')
+            conn_string = os.getenv('DATABASE_CONNECTION_STRING')
             
             if conn_string:
-                print(f"Using full connection string")
                 self.engine = create_engine(conn_string)
             else:
                 # Build connection string from components
-                db_type = self._get_config_value('DATABASE_TYPE', 'sqlite').lower()
-                host = self._get_config_value('DATABASE_HOST')
-                port = self._get_config_value('DATABASE_PORT')
-                database = self._get_config_value('DATABASE_NAME')
-                username = self._get_config_value('DATABASE_USER')
-                password = self._get_config_value('DATABASE_PASSWORD')
-                trusted = self._get_config_value('DATABASE_TRUSTED_CONNECTION', '').lower() == 'yes'
+                db_type = os.getenv('DATABASE_TYPE', 'sqlserver').lower()
+                host = os.getenv('DATABASE_HOST')
+                port = os.getenv('DATABASE_PORT')
+                database = os.getenv('DATABASE_NAME')
+                username = os.getenv('DATABASE_USER')
+                password = os.getenv('DATABASE_PASSWORD')
+                trusted = os.getenv('DATABASE_TRUSTED_CONNECTION', '').lower() == 'yes'
                 
-                print(f"Database type: {db_type}")
-                print(f"Database name: {database}")
-                print(f"Database host: {host}")
-                
-                if not database:
-                    raise ValueError("DATABASE_NAME is required")
-                
-                # Handle SQLite path resolution
-                if db_type == 'sqlite':
-                    resolved_path = self._resolve_database_path(database)
-                    database = resolved_path
-                    print(f"Resolved SQLite path: {database}")
-                elif not host:
-                    raise ValueError("DATABASE_HOST is required for non-SQLite databases")
+                if not host or not database:
+                    raise ValueError("DATABASE_HOST and DATABASE_NAME are required")
                 
                 conn_string = self._build_connection_string(
                     db_type, host, port, database, username, password, trusted
                 )
                 
-                print(f"Built connection string for {db_type}")
                 self.engine = create_engine(conn_string)
             
             # Test connection
-            print("🧪 Testing database connection...")
             self.connection = self.engine.connect()
             self.db_type = self.engine.dialect.name
             
-            print(f"✅ Successfully connected to {self.db_type} database")
             return True
             
         except Exception as e:
-            error_msg = str(e)
-            print(f"❌ Database connection error: {error_msg}")
-            
-            # Provide helpful error messages
-            if "no such file or directory" in error_msg.lower():
-                print("💡 SQLite database file not found. Check the DATABASE_NAME path.")
-                print("💡 Make sure the file exists in your GitHub repository.")
-            elif "connection refused" in error_msg.lower():
-                print("💡 Connection refused. Check if the database server is running.")
-            elif "access denied" in error_msg.lower():
-                print("💡 Access denied. Check your username and password.")
-            elif "driver" in error_msg.lower():
-                print("💡 Database driver issue. Check if required drivers are installed.")
-            
+            print(f"Database connection error: {str(e)}")
             return False
     
     def _build_connection_string(self, db_type: str, host: str, port: str, 
@@ -206,10 +90,7 @@ class DatabaseManager:
                                trusted: bool = False) -> str:
         """Build database connection string based on type."""
         
-        if db_type == 'sqlite':
-            return f"sqlite:///{database}"
-        
-        elif db_type == 'sqlserver':
+        if db_type == 'sqlserver':
             if trusted:
                 return f"mssql+pyodbc://{host}:{port}/{database}?driver=ODBC+Driver+17+for+SQL+Server&trusted_connection=yes"
             else:
@@ -224,7 +105,12 @@ class DatabaseManager:
         elif db_type == 'oracle':
             return f"oracle+cx_oracle://{username}:{password}@{host}:{port}/{database}"
         
+        elif db_type == 'sqlite':
+            # For local testing with SQLite
+            return f"sqlite:///{database}"
+        
         elif db_type == 'duckdb':
+            # For local testing with DuckDB
             return f"duckdb:///{database}"
         
         else:
@@ -241,18 +127,14 @@ class DatabaseManager:
             raise RuntimeError("Not connected to database")
         
         try:
-            print("🔍 Discovering database schema...")
             inspector = inspect(self.engine)
             tables = []
             
             # Get all tables
             table_names = inspector.get_table_names()
-            print(f"Found {len(table_names)} tables: {table_names}")
             
             for table_name in table_names:
                 try:
-                    print(f"Analyzing table: {table_name}")
-                    
                     # Get column information
                     columns_info = inspector.get_columns(table_name)
                     columns = []
@@ -265,19 +147,17 @@ class DatabaseManager:
                             'primary_key': col.get('primary_key', False)
                         })
                     
-                    # Get row count (with error handling for large tables)
+                    # Get row count (sample for large tables)
                     try:
                         count_query = text(f"SELECT COUNT(*) FROM {table_name}")
                         result = self.connection.execute(count_query)
                         row_count = result.scalar()
-                        print(f"  - {table_name}: {row_count:,} rows, {len(columns)} columns")
-                    except Exception as e:
-                        print(f"  - {table_name}: Could not count rows ({str(e)})")
+                    except:
                         row_count = None
                     
                     table_info = TableInfo(
                         name=table_name,
-                        schema='main',  # Default schema
+                        schema='dbo',  # Default schema, could be enhanced
                         columns=columns,
                         row_count=row_count
                     )
@@ -285,12 +165,11 @@ class DatabaseManager:
                     tables.append(table_info)
                     
                 except Exception as e:
-                    print(f"❌ Error processing table {table_name}: {str(e)}")
+                    print(f"Error processing table {table_name}: {str(e)}")
                     continue
             
             # Cache the schema
             self.schema_cache = {table.name: table for table in tables}
-            print(f"✅ Schema discovery complete: {len(tables)} tables cached")
             return tables
             
         except Exception as e:
@@ -324,18 +203,15 @@ class DatabaseManager:
                 if self.db_type == 'sqlserver':
                     # Add TOP to SELECT
                     sql = sql.replace('SELECT', 'SELECT TOP 1000', 1)
-                elif self.db_type in ['postgresql', 'mysql', 'sqlite']:
+                elif self.db_type in ['postgresql', 'mysql', 'duckdb']:
                     sql += ' LIMIT 1000'
                 elif self.db_type == 'oracle':
                     sql += ' AND ROWNUM <= 1000'
             
-            print(f"🔍 Executing query: {sql[:100]}...")
             result = pd.read_sql(sql, self.connection)
-            print(f"✅ Query returned {len(result)} rows")
             return result
             
         except Exception as e:
-            print(f"❌ Query execution failed: {str(e)}")
             raise RuntimeError(f"Query execution failed: {str(e)}")
     
     def is_safe_query(self, sql: str) -> Tuple[bool, str]:
@@ -422,41 +298,12 @@ class DatabaseManager:
         
         return relevant_tables[:5]  # Limit to top 5 relevant tables
     
-    def get_debug_info(self) -> Dict[str, str]:
-        """Get debugging information about the current configuration."""
-        debug_info = {
-            'Database Type': self._get_config_value('DATABASE_TYPE', 'Not Set'),
-            'Database Name': self._get_config_value('DATABASE_NAME', 'Not Set'),
-            'Database Host': self._get_config_value('DATABASE_HOST', 'Not Set'),
-            'Connection Status': 'Connected' if self.connection else 'Not Connected',
-            'Engine Type': str(self.db_type) if self.db_type else 'None',
-            'Tables Cached': str(len(self.schema_cache)),
-            'Streamlit Available': str(STREAMLIT_AVAILABLE),
-            'Current Working Directory': os.getcwd(),
-            'Environment': 'Streamlit Cloud' if STREAMLIT_AVAILABLE and hasattr(st, 'secrets') else 'Local Development'
-        }
-        
-        # Add secrets availability check
-        if STREAMLIT_AVAILABLE:
-            try:
-                has_secrets = hasattr(st, 'secrets') and bool(st.secrets)
-                debug_info['Streamlit Secrets'] = 'Available' if has_secrets else 'Not Available'
-            except:
-                debug_info['Streamlit Secrets'] = 'Error Checking'
-        
-        return debug_info
-    
     def close(self):
         """Close database connection."""
-        try:
-            if self.connection:
-                self.connection.close()
-                print("🔌 Database connection closed")
-            if self.engine:
-                self.engine.dispose()
-                print("🔧 Database engine disposed")
-        except Exception as e:
-            print(f"⚠️ Error closing database connection: {str(e)}")
+        if self.connection:
+            self.connection.close()
+        if self.engine:
+            self.engine.dispose()
 
 
 # Global database manager instance

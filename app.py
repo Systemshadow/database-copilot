@@ -2,7 +2,6 @@
 Enhanced Database Copilot with Multi-Table Support and Structured Display
 Complete version with production + wells data and professional table display.
 Real NY DEC data analysis with AI-powered queries.
-PRODUCTION-READY: Supports both local development and Streamlit Cloud deployment.
 """
 
 import streamlit as st
@@ -93,82 +92,6 @@ def initialize_app():
         st.session_state.chat_history = []
     if 'schema_discovered' not in st.session_state:
         st.session_state.schema_discovered = False
-
-
-def show_debug_panel():
-    """Debug panel to show configuration status - REMOVE AFTER TESTING"""
-    with st.sidebar.expander("🔧 Debug Configuration", expanded=True):
-        st.write("**Configuration Debug Info:**")
-        
-        debug_info = db_manager.get_debug_info()
-        for key, value in debug_info.items():
-            if value == 'Not Set' or value == 'None' or value == 'Not Connected':
-                st.write(f"❌ {key}: {value}")
-            elif 'Connected' in value or 'Available' in value or value == 'True':
-                st.write(f"✅ {key}: {value}")
-            else:
-                st.write(f"ℹ️ {key}: {value}")
-        
-        # Show file system info for SQLite
-        if debug_info.get('Database Type', '').lower() == 'sqlite':
-            db_name = db_manager._get_config_value('DATABASE_NAME')
-            if db_name:
-                st.write(f"\n**File System Check:**")
-                
-                import os
-                from pathlib import Path
-                
-                # Check possible paths
-                current_dir = os.getcwd()
-                project_root = Path(__file__).parent if hasattr(Path(__file__), 'parent') else Path('.')
-                
-                possible_paths = [
-                    db_name,
-                    os.path.join(current_dir, db_name),
-                    f"/mount/src/database-copilot/{db_name}",
-                    os.path.join(project_root, db_name)
-                ]
-                
-                for path in possible_paths:
-                    exists = os.path.exists(path)
-                    icon = "✅" if exists else "❌"
-                    size = ""
-                    if exists:
-                        try:
-                            size = f" ({os.path.getsize(path):,} bytes)"
-                        except:
-                            size = ""
-                    st.write(f"{icon} `{path}`{size}")
-        
-        # Show configuration sources
-        st.write("\n**Configuration Sources:**")
-        import os
-        
-        # Check environment variables
-        env_vars = ['DATABASE_TYPE', 'DATABASE_NAME', 'OPENAI_API_KEY']
-        st.write("*Environment Variables:*")
-        for var in env_vars:
-            value = os.getenv(var, 'Not Set')
-            if var == 'OPENAI_API_KEY' and value != 'Not Set':
-                value = f"{value[:8]}..." if len(value) > 8 else "Set"
-            st.write(f"- {var}: {value}")
-        
-        # Check Streamlit secrets
-        st.write("*Streamlit Secrets:*")
-        try:
-            if hasattr(st, 'secrets'):
-                for var in env_vars:
-                    if var in st.secrets:
-                        value = str(st.secrets[var])
-                        if var == 'OPENAI_API_KEY' and value:
-                            value = f"{value[:8]}..." if len(value) > 8 else "Set"
-                        st.write(f"- {var}: {value}")
-                    else:
-                        st.write(f"- {var}: Not Set")
-            else:
-                st.write("Streamlit secrets not available")
-        except Exception as e:
-            st.write(f"Error checking secrets: {str(e)}")
 
 
 def connect_to_database():
@@ -321,7 +244,7 @@ def enhanced_chat_interface():
         with col2:
             st.markdown("### 🛢️ Cross-Dataset Analysis")
             cross_examples = [
-                "Show production for horizontal wells in Broome County",
+                "Show production for horizontal wells in Steuben County",
                 "Which wells have the highest production and what are their depths?",
                 "Compare production by formation type",
                 "Show all active wells with their 2024 production totals"
@@ -521,8 +444,8 @@ def configuration_panel():
         
         # Check non-sensitive configuration
         env_vars = {
-            "Database": db_manager._get_config_value('DATABASE_NAME'),
-            "Database Type": db_manager._get_config_value('DATABASE_TYPE')
+            "Database": os.getenv('DATABASE_NAME'),
+            "Database Type": os.getenv('DATABASE_TYPE')
         }
         
         for var_name, var_value in env_vars.items():
@@ -540,7 +463,7 @@ def configuration_panel():
             pass
         
         if not ai_enabled:
-            api_key = db_manager._get_config_value('OPENAI_API_KEY')
+            api_key = os.getenv('OPENAI_API_KEY')
             if api_key and api_key != 'your_openai_api_key_here':
                 ai_enabled = True
         
@@ -576,9 +499,6 @@ def main():
     st.sidebar.markdown("*NY DEC Oil & Gas Data Analysis*")
     st.sidebar.markdown("---")
     
-    # DEBUG PANEL - REMOVE THIS LINE AFTER TESTING
-    show_debug_panel()
-    
     # Core application components
     connect_to_database()
     discover_schema()
@@ -589,7 +509,7 @@ def main():
     
     # Professional footer with database statistics
     st.markdown("---")
-    company_name = db_manager._get_config_value('COMPANY_NAME', 'NY DEC Data Analysis')
+    company_name = os.getenv('COMPANY_NAME', 'NY DEC Data Analysis')
     st.markdown(f"**Enhanced Database Copilot** - AI-powered analysis of real NY DEC oil & gas data for {company_name}")
     
     # Show live statistics if connected
